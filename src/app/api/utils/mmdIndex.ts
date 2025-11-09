@@ -44,6 +44,14 @@ class MMDIndexServer {
   load(): void {
     if (this.loaded) return;
 
+    // Skip loading on serverless environments (Amplify, Vercel) where filesystem access is limited
+    // The index is optional - API will work without it
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.AWS_EXECUTION_ENV) {
+      console.log("Skipping MMD index load in serverless environment (optional enhancement)");
+      this.loaded = false;
+      return;
+    }
+
     try {
       // Try multiple possible paths
       const possiblePaths = [
@@ -54,28 +62,44 @@ class MMDIndexServer {
 
       let filePath: string | null = null;
       for (const possiblePath of possiblePaths) {
-        if (fs.existsSync(possiblePath)) {
-          filePath = possiblePath;
-          break;
+        try {
+          if (fs.existsSync(possiblePath)) {
+            filePath = possiblePath;
+            break;
+          }
+        } catch (e) {
+          // Path check failed, try next
+          continue;
         }
       }
 
       if (!filePath) {
-        console.warn("mmd_lines_data.json not found in any expected location, continuing without enhanced indexing");
+        // Silently skip - this is optional
         return;
       }
 
+      // Safely read and parse the file
       const fileContent = fs.readFileSync(filePath, "utf-8");
+      if (!fileContent || fileContent.length === 0) {
+        return;
+      }
+
       this.linesData = JSON.parse(fileContent);
+      if (!this.linesData || !this.linesData.pages) {
+        return;
+      }
+
       this.buildIndex();
       this.loaded = true;
       if (this.linesData) {
-        console.log(`MMD index loaded successfully: ${this.lineTexts.length} lines, ${this.chapters.length} chapters, ${this.linesData.pages.length} pages`);
+        console.log(`MMD index loaded: ${this.lineTexts.length} lines, ${this.chapters.length} chapters`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.warn("Error loading mmd_lines_data.json (will continue without enhanced indexing):", errorMessage);
-      // Continue without the index - it's optional and shouldn't break functionality
+      // Silent fail - index is optional enhancement
+      // Don't log errors in production to avoid noise
+      if (process.env.NODE_ENV === "development") {
+        console.warn("MMD index not available (optional):", error instanceof Error ? error.message : "unknown error");
+      }
       this.loaded = false;
     }
   }
@@ -389,30 +413,17 @@ class MMDIndexServer {
 
 // Singleton instance - lazy load to avoid blocking server startup
 let mmdIndexInstance: MMDIndexServer | null = null;
-let isLoading = false;
 
 export function getMMDIndex(): MMDIndexServer {
+  // Always return an instance, even if not loaded (graceful degradation)
   if (!mmdIndexInstance) {
     mmdIndexInstance = new MMDIndexServer();
-    // Load asynchronously to avoid blocking
-    if (!isLoading) {
-      isLoading = true;
-      // Load in background - won't block if it takes time
-      try {
-        mmdIndexInstance.load();
-      } catch (error) {
-        console.warn("Background MMD index load failed, will retry on first use");
-      } finally {
-        isLoading = false;
-      }
-    }
-  }
-  // Ensure it's loaded (retry if needed)
-  if (!mmdIndexInstance.isLoaded() && !isLoading) {
+    // Try to load, but don't throw if it fails
     try {
       mmdIndexInstance.load();
     } catch (error) {
-      // Silent fail - optional feature
+      // Silent fail - index is optional enhancement
+      // API will work without it
     }
   }
   return mmdIndexInstance;

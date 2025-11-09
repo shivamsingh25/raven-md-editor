@@ -19,27 +19,44 @@ function findAllOccurrences(markdown: string, pattern: string): number[] {
 
 // Helper function to get relevant context from markdown with MMD index enhancement
 function getRelevantContext(markdown: string, selectedText: string | null, request: string, maxChars: number = 25000): string {
-  const mmdIndex = getMMDIndex();
   let context = "";
   let enhancedInfo = "";
 
-  // Use MMD index to get enhanced context if available
-  if (mmdIndex.isLoaded()) {
-    enhancedInfo = mmdIndex.getEnhancedContext(markdown, selectedText, request);
+  // Use MMD index to get enhanced context if available (optional - won't break if unavailable)
+  try {
+    const mmdIndex = getMMDIndex();
+    if (mmdIndex.isLoaded()) {
+      try {
+        enhancedInfo = mmdIndex.getEnhancedContext(markdown, selectedText, request);
+      } catch (error) {
+        // Index methods failed - continue without enhancement
+      }
+    }
+  } catch (error) {
+    // Index unavailable - continue without it
   }
 
   // If text is selected, find its context in the document
   if (selectedText && selectedText.trim()) {
-    // Try to use MMD index first for better accuracy
-    if (mmdIndex.isLoaded()) {
-      const occurrences = mmdIndex.findAllOccurrencesWithContext(selectedText, 3);
-      if (occurrences.length > 0) {
-        const contextParts = occurrences.map(occ => occ.context);
-        context = contextParts.join('\n\n[... location change ...]\n\n');
-        if (occurrences.length > 1) {
-          enhancedInfo += `\n\nIMPORTANT: The selected text appears ${occurrences.length} times in the document. Make sure to update ALL occurrences if needed.`;
+    // Try to use MMD index first for better accuracy (if available)
+    try {
+      const mmdIndex = getMMDIndex();
+      if (mmdIndex.isLoaded()) {
+        try {
+          const occurrences = mmdIndex.findAllOccurrencesWithContext(selectedText, 3);
+          if (occurrences.length > 0) {
+            const contextParts = occurrences.map(occ => occ.context);
+            context = contextParts.join('\n\n[... location change ...]\n\n');
+            if (occurrences.length > 1) {
+              enhancedInfo += `\n\nIMPORTANT: The selected text appears ${occurrences.length} times in the document. Make sure to update ALL occurrences if needed.`;
+            }
+          }
+        } catch (error) {
+          // Index lookup failed - fall through to string search
         }
       }
+    } catch (error) {
+      // Index unavailable - fall through to string search
     }
 
     // Fallback to simple string search if index not available
@@ -54,15 +71,26 @@ function getRelevantContext(markdown: string, selectedText: string | null, reque
   } else {
     // No selection - check for chapter/section requests
     const chapterMatch = request.match(/chapter\s+(\d+)/i);
-    if (chapterMatch && mmdIndex.isLoaded()) {
-      const chapterNum = chapterMatch[1];
-      const chapters = mmdIndex.findChapter(`Chapter ${chapterNum}`);
-      
-      if (chapters.length > 0) {
-        // Use MMD index to get all chapter occurrences
-        const contextParts = chapters.map(ch => ch.context);
-        context = contextParts.join('\n\n[... chapter occurrence ...]\n\n');
-        enhancedInfo += `\n\nFound Chapter ${chapterNum} at ${chapters.length} location(s) in the document.`;
+    if (chapterMatch) {
+      try {
+        const mmdIndex = getMMDIndex();
+        if (mmdIndex.isLoaded()) {
+          try {
+            const chapterNum = chapterMatch[1];
+            const chapters = mmdIndex.findChapter(`Chapter ${chapterNum}`);
+            
+            if (chapters.length > 0) {
+              // Use MMD index to get all chapter occurrences
+              const contextParts = chapters.map(ch => ch.context);
+              context = contextParts.join('\n\n[... chapter occurrence ...]\n\n');
+              enhancedInfo += `\n\nFound Chapter ${chapterNum} at ${chapters.length} location(s) in the document.`;
+            }
+          } catch (error) {
+            // Index lookup failed - fall through to pattern matching
+          }
+        }
+      } catch (error) {
+        // Index unavailable - fall through to pattern matching
       }
     }
 
@@ -137,6 +165,14 @@ function estimateTokens(text: string): number {
 
 export async function POST(req: NextRequest) {
   try {
+    // Validate OpenAI API key first
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: "OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable." },
+        { status: 500 }
+      );
+    }
+
     const { markdown, selectedText, request } = await req.json();
 
     if (!request || !request.trim()) {
@@ -158,24 +194,26 @@ export async function POST(req: NextRequest) {
     const contextSize = estimateTokens(relevantContext);
     
     // Get MMD index for enhanced context (optional - won't break if unavailable)
-    const mmdIndex = getMMDIndex();
-    const useEnhancedIndex = mmdIndex.isLoaded();
-    
-    console.log(`Processing request: context size ~${contextSize} tokens, full doc: ${markdown.length} chars, request: "${request}", enhanced index: ${useEnhancedIndex}`);
-
-    // Get document structure info if available
     let structureInfo = "";
-    if (useEnhancedIndex) {
-      try {
-        const structure = mmdIndex.getDocumentStructure();
-        if (structure.chapters.length > 0) {
-          structureInfo = `\n\nDocument Structure: ${structure.totalPages} pages, ${structure.totalLines} lines, ${structure.chapters.length} chapters/sections detected.`;
+    try {
+      const mmdIndex = getMMDIndex();
+      const useEnhancedIndex = mmdIndex.isLoaded();
+      
+      if (useEnhancedIndex) {
+        try {
+          const structure = mmdIndex.getDocumentStructure();
+          if (structure && structure.chapters && structure.chapters.length > 0) {
+            structureInfo = `\n\nDocument Structure: ${structure.totalPages} pages, ${structure.totalLines} lines, ${structure.chapters.length} chapters/sections detected.`;
+          }
+        } catch (error) {
+          // Silently continue without structure info
         }
-      } catch (error) {
-        console.warn("Error getting document structure:", error);
-        // Continue without structure info
       }
+    } catch (error) {
+      // Index loading failed - continue without it (optional feature)
     }
+    
+    console.log(`Processing request: context size ~${contextSize} tokens, full doc: ${markdown.length} chars, request: "${request.substring(0, 50)}..."`);
 
     const context = selectedText
       ? `Edit the following selected text: "${selectedText}"\n\nContext from document:\n${relevantContext}${structureInfo}`
@@ -251,30 +289,40 @@ export async function POST(req: NextRequest) {
         Connection: "keep-alive",
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API Error:", error);
     
     // Provide more specific error messages
     let errorMessage = "Internal server error";
     let statusCode = 500;
+    let errorDetails: string | undefined;
     
     if (error instanceof OpenAI.APIError) {
       statusCode = error.status || 500;
       errorMessage = error.message || "OpenAI API error";
       
       if (error.status === 401) {
-        errorMessage = "Invalid API key. Please check your OPENAI_API_KEY environment variable.";
+        errorMessage = "Invalid API key. Please check your OPENAI_API_KEY environment variable in Amplify.";
       } else if (error.status === 429) {
         errorMessage = "Rate limit exceeded. Please try again later.";
       } else if (error.status === 413 || errorMessage.includes("too long")) {
         errorMessage = "Request too large. Please select a smaller portion of text or use a more specific request.";
       }
+      errorDetails = error.message;
     } else if (error instanceof Error) {
       errorMessage = error.message;
+      errorDetails = error.stack;
+    } else {
+      errorMessage = String(error);
+    }
+    
+    // Don't expose internal errors in production
+    if (process.env.NODE_ENV === "production") {
+      errorDetails = undefined;
     }
     
     return NextResponse.json(
-      { error: errorMessage, details: error?.message },
+      { error: errorMessage, ...(errorDetails && { details: errorDetails }) },
       { status: statusCode }
     );
   }
