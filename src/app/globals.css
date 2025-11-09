@@ -1,26 +1,197 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  padding: 0;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Fix for markdown rendering - prevent overlapping and layout shifts */
+.MathJax,
+mjx-container {
+  display: inline-block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  vertical-align: middle !important;
+}
+
+/* Ensure proper spacing for markdown content */
+[data-mathpix-markdown],
+.mathpix-markdown {
+  line-height: 1.6;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Improved spacing for headings and sections */
+[data-mathpix-markdown] h1,
+.mathpix-markdown h1 {
+  margin-top: 1.5em !important;
+  margin-bottom: 0.75em !important;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+[data-mathpix-markdown] h2,
+.mathpix-markdown h2 {
+  margin-top: 1.25em !important;
+  margin-bottom: 0.5em !important;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+[data-mathpix-markdown] h3,
+.mathpix-markdown h3 {
+  margin-top: 1em !important;
+  margin-bottom: 0.5em !important;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+[data-mathpix-markdown] h4,
+[data-mathpix-markdown] h5,
+[data-mathpix-markdown] h6,
+.mathpix-markdown h4,
+.mathpix-markdown h5,
+.mathpix-markdown h6 {
+  margin-top: 0.875em !important;
+  margin-bottom: 0.375em !important;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* Paragraph spacing - reduced from default */
+[data-mathpix-markdown] p,
+.mathpix-markdown p {
+  margin-top: 0.5em !important;
+  margin-bottom: 0.5em !important;
+  line-height: 1.6;
+}
+
+/* Section spacing */
+[data-mathpix-markdown] section,
+.mathpix-markdown section {
+  margin-top: 1em !important;
+  margin-bottom: 1em !important;
+}
+
+/* Lists */
+[data-mathpix-markdown] ul,
+[data-mathpix-markdown] ol,
+.mathpix-markdown ul,
+.mathpix-markdown ol {
+  margin-top: 0.5em !important;
+  margin-bottom: 0.5em !important;
+  padding-left: 1.5em;
+}
+
+[data-mathpix-markdown] li,
+.mathpix-markdown li {
+  margin-top: 0.25em !important;
+  margin-bottom: 0.25em !important;
+}
+
+/* Fix for hover effects - prevent layout shifts */
+[data-mathpix-markdown] *,
+.mathpix-markdown * {
+  transition: background-color 0.15s ease-in-out;
+}
+
+/* Prevent text overflow */
+[data-mathpix-markdown] p,
+[data-mathpix-markdown] div,
+[data-mathpix-markdown] span,
+.mathpix-markdown p,
+.mathpix-markdown div,
+.mathpix-markdown span {
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Fix for images in markdown */
+[data-mathpix-markdown] img,
+.mathpix-markdown img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em auto;
+}
+
+/* Fix for code blocks */
+[data-mathpix-markdown] pre,
+[data-mathpix-markdown] code,
+.mathpix-markdown pre,
+.mathpix-markdown code {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Fix for tables */
+[data-mathpix-markdown] table,
+.mathpix-markdown table {
+  margin: 0.75em 0;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+[data-mathpix-markdown] table th,
+[data-mathpix-markdown] table td,
+.mathpix-markdown table th,
+.mathpix-markdown table td {
+  padding: 0.5em;
+  border: 1px solid #e2e8f0;
+}
+
+/* Double-click selection highlight */
+[data-mathpix-markdown] ::selection,
+.mathpix-markdown ::selection {
+  background-color: rgba(99, 102, 241, 0.2);
+}
+
+[data-mathpix-markdown] ::-moz-selection,
+.mathpix-markdown ::-moz-selection {
+  background-color: rgba(99, 102, 241, 0.2);
+}
+
+#split-pane {
+  display: flex;
+  height: 100vh;
+}
+#left-pane {
+  flex: 1;
+  overflow: auto;
+  border-right: 1px solid #e0e0e0;
+  position: relative;
+}
+#right-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+}
+.resizer:hover {
+  background: #ddd;
 }
